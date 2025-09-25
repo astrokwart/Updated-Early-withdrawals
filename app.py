@@ -10,39 +10,50 @@ def load_clean_file(file):
     xls = pd.ExcelFile(file)
     first_sheet = xls.sheet_names[0]
     df = pd.read_excel(file, sheet_name=first_sheet, header=4)
+    df.columns = df.columns.str.strip().str.lower()
     return df
 
-def process_files(deposits, withdrawals):
-    # Normalize column names (strip spaces, lowercase)
-    deposits.columns = deposits.columns.str.strip().str.lower()
-    withdrawals.columns = withdrawals.columns.str.strip().str.lower()
+def find_column(columns, keywords):
+    """Find the first matching column given keywords."""
+    for col in columns:
+        for kw in keywords:
+            if kw in col:
+                return col
+    return None
 
-    # Map expected columns
-    date_col = "date"
-    acct_col = "account number"
-    credit_col = "credit amt"
-    debit_col = "debit amt"
+def process_files(deposits, withdrawals):
+    # Detect columns dynamically
+    date_col_d = find_column(deposits.columns, ["date"])
+    acct_col_d = find_column(deposits.columns, ["account"])
+    credit_col = find_column(deposits.columns, ["credit"])
+    
+    date_col_w = find_column(withdrawals.columns, ["date"])
+    acct_col_w = find_column(withdrawals.columns, ["account"])
+    debit_col = find_column(withdrawals.columns, ["debit"])
+
+    if not all([date_col_d, acct_col_d, credit_col, date_col_w, acct_col_w, debit_col]):
+        raise ValueError("Could not auto-detect all required columns. Please check headers.")
 
     # Convert dates
-    deposits[date_col] = pd.to_datetime(deposits[date_col], errors="coerce")
-    withdrawals[date_col] = pd.to_datetime(withdrawals[date_col], errors="coerce")
+    deposits[date_col_d] = pd.to_datetime(deposits[date_col_d], errors="coerce")
+    withdrawals[date_col_w] = pd.to_datetime(withdrawals[date_col_w], errors="coerce")
 
-    # Select useful columns
-    deposits = deposits[[date_col, acct_col, credit_col]].dropna()
-    withdrawals = withdrawals[[date_col, acct_col, debit_col]].dropna()
+    # Keep only relevant cols
+    deposits = deposits[[date_col_d, acct_col_d, credit_col]].dropna()
+    withdrawals = withdrawals[[date_col_w, acct_col_w, debit_col]].dropna()
 
-    # Rename for clarity
-    deposits.rename(columns={date_col: "Deposit Date", credit_col: "Deposit Amt"}, inplace=True)
-    withdrawals.rename(columns={date_col: "Withdrawal Date", debit_col: "Withdrawal Amt"}, inplace=True)
+    # Rename
+    deposits.rename(columns={date_col_d: "Deposit Date", credit_col: "Deposit Amt", acct_col_d: "Account Number"}, inplace=True)
+    withdrawals.rename(columns={date_col_w: "Withdrawal Date", debit_col: "Withdrawal Amt", acct_col_w: "Account Number"}, inplace=True)
 
-    # Merge deposits & withdrawals
-    merged = pd.merge(deposits, withdrawals, on=acct_col, how="inner")
+    # Merge
+    merged = pd.merge(deposits, withdrawals, on="Account Number", how="inner")
 
-    # Calculate days held
+    # Calculate holding days
     merged["Days Held"] = (merged["Withdrawal Date"] - merged["Deposit Date"]).dt.days
     merged["Early Withdrawal"] = merged["Days Held"] < 14
 
-    # Separate reports
+    # Split reports
     early_withdrawals = merged[merged["Early Withdrawal"]]
     valid_deposits = merged[~merged["Early Withdrawal"]]
 
