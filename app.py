@@ -7,11 +7,15 @@ st.title("Early Withdrawal Processing Tool")
 deposit_file = st.file_uploader("Upload Deposit File", type=["xlsx"])
 withdrawal_file = st.file_uploader("Upload Withdrawal File", type=["xlsx"])
 
+def load_first_sheet(file):
+    xls = pd.ExcelFile(file)
+    first_sheet = xls.sheet_names[0]   # take first sheet automatically
+    return pd.read_excel(file, sheet_name=first_sheet)
+
 if deposit_file and withdrawal_file:
-    # Read uploaded Excel files
     try:
-        deposits = pd.read_excel(deposit_file, sheet_name="Sheet1")
-        withdrawals = pd.read_excel(withdrawal_file, sheet_name="Sheet1")
+        deposits = load_first_sheet(deposit_file)
+        withdrawals = load_first_sheet(withdrawal_file)
 
         st.subheader("Preview: Deposits")
         st.dataframe(deposits.head())
@@ -19,15 +23,11 @@ if deposit_file and withdrawal_file:
         st.subheader("Preview: Withdrawals")
         st.dataframe(withdrawals.head())
 
-        # --- Example: simple merge (you’ll define exact rules later) ---
-        merged = pd.merge(withdrawals, deposits, on="Account Number", how="left")
-
-        st.subheader("Processed Data")
-        st.dataframe(merged.head())
-
-        # Save output
+        # Save raw cleaned outputs (placeholders for now)
         output_file = "Processed_Report.xlsx"
-        merged.to_excel(output_file, index=False)
+        with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+            deposits.to_excel(writer, sheet_name="Deposits", index=False)
+            withdrawals.to_excel(writer, sheet_name="Withdrawals", index=False)
 
         with open(output_file, "rb") as f:
             st.download_button("Download Processed Report", f, file_name=output_file)
