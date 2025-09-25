@@ -7,24 +7,25 @@ st.title("Early Withdrawal Processing Tool")
 deposit_file = st.file_uploader("Upload Deposit File", type=["xlsx"])
 withdrawal_file = st.file_uploader("Upload Withdrawal File", type=["xlsx"])
 
-def load_first_sheet(file):
+def load_clean_file(file):
     xls = pd.ExcelFile(file)
     first_sheet = xls.sheet_names[0]
-    return pd.read_excel(file, sheet_name=first_sheet, header=None)  # load raw, no headers
+    # Start reading from row 5 (index=4)
+    df = pd.read_excel(file, sheet_name=first_sheet, header=4)
+    return df
 
 if deposit_file and withdrawal_file:
     try:
-        deposits_raw = load_first_sheet(deposit_file)
-        withdrawals_raw = load_first_sheet(withdrawal_file)
+        deposits = load_clean_file(deposit_file)
+        withdrawals = load_clean_file(withdrawal_file)
 
-        # Show first 15 rows so we can locate real headers
-        st.subheader("Deposit File Preview")
-        st.dataframe(deposits_raw.head(15))
+        st.subheader("Deposit File (Cleaned Preview)")
+        st.dataframe(deposits.head())
 
-        st.subheader("Withdrawal File Preview")
-        st.dataframe(withdrawals_raw.head(15))
+        st.subheader("Withdrawal File (Cleaned Preview)")
+        st.dataframe(withdrawals.head())
 
-        st.info("Check the preview above and tell me which row number contains the actual column headers (e.g., Date, Credit Amt, Debit Amt, Balance).")
+        st.success("Files loaded and headers fixed. Ready for processing!")
 
     except Exception as e:
-        st.error(f"Error reading files: {e}")
+        st.error(f"Error processing files: {e}")
