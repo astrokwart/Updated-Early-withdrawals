@@ -11,7 +11,7 @@ def load_clean_file(file):
     first_sheet = xls.sheet_names[0]
     df = pd.read_excel(file, sheet_name=first_sheet, header=4)
     df.columns = df.columns.str.strip().str.lower()
-    return df
+    return df.fillna("")   # Replace NaN with blank strings for Streamlit display
 
 def find_column(columns, keywords):
     """Find the first matching column given keywords."""
@@ -31,16 +31,28 @@ def process_files(deposits, withdrawals):
     acct_col_w = find_column(withdrawals.columns, ["account"])
     debit_col = find_column(withdrawals.columns, ["debit"])
 
-    if not all([date_col_d, acct_col_d, credit_col, date_col_w, acct_col_w, debit_col]):
-        raise ValueError("Could not auto-detect all required columns. Please check headers.")
+    detected = {
+        "Deposit Date": date_col_d,
+        "Deposit Account": acct_col_d,
+        "Deposit Credit": credit_col,
+        "Withdrawal Date": date_col_w,
+        "Withdrawal Account": acct_col_w,
+        "Withdrawal Debit": debit_col,
+    }
+
+    # Show detected columns to confirm
+    st.write("📌 Auto-detected columns:", detected)
+
+    if not all(detected.values()):
+        raise ValueError("❌ Could not auto-detect all required columns. Please check headers.")
 
     # Convert dates
     deposits[date_col_d] = pd.to_datetime(deposits[date_col_d], errors="coerce")
     withdrawals[date_col_w] = pd.to_datetime(withdrawals[date_col_w], errors="coerce")
 
     # Keep only relevant cols
-    deposits = deposits[[date_col_d, acct_col_d, credit_col]].dropna()
-    withdrawals = withdrawals[[date_col_w, acct_col_w, debit_col]].dropna()
+    deposits = deposits[[date_col_d, acct_col_d, credit_col]]
+    withdrawals = withdrawals[[date_col_w, acct_col_w, debit_col]]
 
     # Rename
     deposits.rename(columns={date_col_d: "Deposit Date", credit_col: "Deposit Amt", acct_col_d: "Account Number"}, inplace=True)
@@ -72,10 +84,10 @@ if deposit_file and withdrawal_file:
         withdrawals = load_clean_file(withdrawal_file)
 
         st.subheader("Deposit File Preview")
-        st.dataframe(deposits.head())
+        st.dataframe(deposits.head(10))
 
         st.subheader("Withdrawal File Preview")
-        st.dataframe(withdrawals.head())
+        st.dataframe(withdrawals.head(10))
 
         if st.button("Process Files"):
             early_withdrawals, valid_deposits = process_files(deposits, withdrawals)
@@ -86,5 +98,4 @@ if deposit_file and withdrawal_file:
             st.subheader("Valid Deposits (Preview)")
             st.dataframe(valid_deposits.head())
 
-    except Exception as e:
-        st.error(f"Error processing files: {e}")
+    except Exception
