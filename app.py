@@ -1,55 +1,48 @@
-import streamlit as st
 import pandas as pd
 
-st.title("Early Withdrawal Report Tool")
+# === Step 1: File paths (replace with your filenames) ===
+deposit_file = "Deposits.xlsx"
+withdrawal_file = "Withdrawals.xlsx"
 
-try:
-    deposit_file = st.file_uploader("Upload Deposit File", type=["xlsx"])
-    withdrawal_file = st.file_uploader("Upload Withdrawal File", type=["xlsx"])
+# === Step 2: Always pick the first sheet from each file ===
+deposits = pd.read_excel(deposit_file, sheet_name=0)    # First sheet only
+withdrawals = pd.read_excel(withdrawal_file, sheet_name=0)  # First sheet only
 
-    if deposit_file and withdrawal_file:
-        try:
-            # Read files, skipping first 5 rows
-            deposits = pd.read_excel(deposit_file, skiprows=5)
-            withdrawals = pd.read_excel(withdrawal_file, skiprows=5)
+# === Step 3: Normalize column names ===
+deposits.columns = deposits.columns.str.strip().str.lower()
+withdrawals.columns = withdrawals.columns.str.strip().str.lower()
 
-            st.subheader("Deposit File Preview")
-            st.dataframe(deposits.head())
+# === Step 4: Ensure dates are datetime ===
+deposits['deposit date'] = pd.to_datetime(deposits['deposit date'])
+withdrawals['withdrawal date'] = pd.to_datetime(withdrawals['withdrawal date'])
 
-            st.subheader("Withdrawal File Preview")
-            st.dataframe(withdrawals.head())
+# === Step 5: Function to calculate working days ===
+def working_days(start, end):
+    if pd.isna(end):
+        return None
+    return len(pd.bdate_range(start, end)) - 1  # exclude deposit day itself
 
-            # --- Ensure date columns are datetime ---
-            deposits["Date"] = pd.to_datetime(deposits["Date"], errors="coerce")
-            withdrawals["Date"] = pd.to_datetime(withdrawals["Date"], errors="coerce")
+# === Step 6: Merge deposits with withdrawals ===
+merged = pd.merge(
+    deposits,
+    withdrawals,
+    on="account number",
+    suffixes=("_dep", "_withd"),
+    how="left"
+)
 
-            # --- Merge deposits and withdrawals on Account No + Amount ---
-            merged = pd.merge(
-                deposits,
-                withdrawals,
-                on=["Account No", "Amount"],
-                how="left",
-                suffixes=("_dep", "_withd")
-            )
+merged['working days held'] = merged.apply(
+    lambda row: working_days(row['deposit date'], row['withdrawal date']),
+    axis=1
+)
 
-            # --- Calculate difference in days ---
-            merged["Days Held"] = (merged["Date_withd"] - merged["Date_dep"]).dt.days
+# === Step 7: Flag early withdrawals ===
+merged['early withdrawal'] = merged['working days held'].apply(
+    lambda x: True if x is not None and x < 14 else False
+)
 
-            # --- Early withdrawals (<14 days) ---
-            early_withdrawals = merged[merged["Days Held"] < 14]
+# === Step 8: Save report ===
+output_file = "Early_Withdrawal_Report.xlsx"
+merged.to_excel(output_file, index=False)
 
-            st.subheader("Early Withdrawals Report")
-            st.dataframe(early_withdrawals)
-
-            # --- Download option ---
-            st.download_button(
-                "Download Early Withdrawals as Excel",
-                early_withdrawals.to_excel(index=False, engine="openpyxl"),
-                file_name="early_withdrawals.xlsx"
-            )
-
-        except Exception as e:
-            st.error(f"Error processing files: {e}")
-
-except Exception as e:
-    st.error(f"Unexpected error: {e}")
+print(f"✅ Report generated: {output_file}")
