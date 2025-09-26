@@ -1,25 +1,33 @@
 import pandas as pd
+import streamlit as st
+from io import BytesIO
 
-def process_files(deposit_file, withdrawal_file, output_file="Early_Withdrawal_Report.xlsx"):
-    # Read only the first sheet from each file
+st.title("📊 Early Withdrawal Report Generator")
+
+# Upload files
+deposit_file = st.file_uploader("Upload Deposit File (Excel)", type=["xlsx"])
+withdrawal_file = st.file_uploader("Upload Withdrawal File (Excel)", type=["xlsx"])
+
+if deposit_file and withdrawal_file:
+    # === Step 1: Read first sheet from both files ===
     deposits = pd.read_excel(deposit_file, sheet_name=0)
     withdrawals = pd.read_excel(withdrawal_file, sheet_name=0)
 
-    # Normalize column names
+    # === Step 2: Normalize column names ===
     deposits.columns = deposits.columns.str.strip().str.lower()
     withdrawals.columns = withdrawals.columns.str.strip().str.lower()
 
-    # Ensure dates are datetime
+    # === Step 3: Ensure date columns are datetime ===
     deposits['deposit date'] = pd.to_datetime(deposits['deposit date'])
     withdrawals['withdrawal date'] = pd.to_datetime(withdrawals['withdrawal date'])
 
-    # Working days calculator
+    # === Step 4: Working days calculator ===
     def working_days(start, end):
         if pd.isna(end):
             return None
         return len(pd.bdate_range(start, end)) - 1  # exclude deposit day itself
 
-    # Merge deposits with withdrawals
+    # === Step 5: Merge deposits & withdrawals ===
     merged = pd.merge(
         deposits,
         withdrawals,
@@ -33,11 +41,23 @@ def process_files(deposit_file, withdrawal_file, output_file="Early_Withdrawal_R
         axis=1
     )
 
-    # Flag early withdrawals
+    # === Step 6: Flag early withdrawals ===
     merged['early withdrawal'] = merged['working days held'].apply(
         lambda x: True if x is not None and x < 14 else False
     )
 
-    # Save final report
-    merged.to_excel(output_file, index=False)
-    return output_file
+    # === Step 7: Show preview ===
+    st.subheader("Preview of Processed Data")
+    st.dataframe(merged.head(20))
+
+    # === Step 8: Prepare for download ===
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        merged.to_excel(writer, index=False, sheet_name="Report")
+
+    st.download_button(
+        label="📥 Download Early Withdrawal Report",
+        data=output.getvalue(),
+        file_name="Early_Withdrawal_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
